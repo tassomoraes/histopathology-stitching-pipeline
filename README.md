@@ -24,18 +24,13 @@ The goal is to provide a clean, well-structured, small-scale repository to explo
 Python 3.10+  
 See `requirements.txt` (to be added during development).
 
-## Repository Structure (initial)
-```
-histopathology-stitching-pipeline/
-│
-├── src/ # All source code (to be added)
-├── data/ # Tile images (to be added)
-├── notebooks/ # Experiments and visualizations
-├── docs/ # Documentation and design notes
-├── .gitignore
-├── LICENSE
-└── README.md
-```
+## Project structure
+
+- `src/stitching/` – core stitching logic (graph, keypoints, matching, homography, canvas).
+- `data/` – input tiles and intermediate outputs.
+- `docs/` – project documentation and notes.
+- `notebooks/` – exploratory experiments (optional).
+- `tests/` – automated tests for the core modules.
 
 ## Purpose
 This repository exists as a training ground for:

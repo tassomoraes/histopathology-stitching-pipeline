@@ -1,0 +1,40 @@
+{
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "id": "#VSC-95243f07",
+            "metadata": {
+                "language": "markdown"
+            },
+            "source": [
+                "### Testando `re`"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "id": "#VSC-5f6037d3",
+            "metadata": {
+                "language": "python"
+            },
+            "source": [
+                "import re",
+                "",
+                "COORD_PATTERN = re.compile(r\"_x(\\d+)_y(\\d+)\")",
+                "",
+                "match = COORD_PATTERN.search(\"image_x123_y456.png\")",
+                "",
+                "print(match.group(1))  # Output: 123"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "id": "#VSC-38e27c74",
+            "metadata": {
+                "language": "python"
+            },
+            "source": [
+                ""
+            ]
+        }
+    ]
+}

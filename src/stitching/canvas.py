@@ -170,7 +170,8 @@ def render_mosaic(
     T = canvas_spec.offset_matrix
 
     # Initialize empty canvas (assume 3 channels; convert if needed)
-    canvas = np.zeros((height, width, 3), dtype=np.uint8)
+    canvas = np.full((height, width, 3), 255, dtype=np.uint8)  # white background
+
 
     # Warp and composite each image
     for filename, img in images.items():

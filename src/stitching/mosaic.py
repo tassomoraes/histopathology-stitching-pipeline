@@ -36,8 +36,11 @@ def _keypoints_results_to_xy(
     Returns:
         Mapping filename -> (N, 2) float32 array.
     """
+
+    # Prepare output map
     xy_map: Dict[str, np.ndarray] = {}
 
+    # Convert each result
     for filename, result in keypoints_results.items():
         if not result.keypoints:
             xy_map[filename] = np.empty((0, 2), dtype=np.float32)

@@ -202,6 +202,10 @@ def run_full_pipeline(
         h, w, c = img.shape
         image_shapes[path.name] = (h, w, c)
 
+    # Background correction (optional but recommended for histopathology tiles)
+    background = compute_mean_background(images, blur_sigma=50.0)
+    images = subtract_background(images, background, recenter_value=128.0)
+
     # Keep only transforms for which we actually loaded images
     transforms_for_loaded = {
         fname: H for fname, H in transforms.items() if fname in images

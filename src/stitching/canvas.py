@@ -150,59 +150,72 @@ def render_mosaic(
     images: Dict[str, np.ndarray],
     transforms: Dict[str, np.ndarray],
     canvas_spec: CanvasSpec,
+    blend_mode: str = "overwrite",
+    exposure_mode: str = "GAIN",
+    num_bands: int = 5,
 ) -> np.ndarray:
     """
     Warp and composite all images into a single mosaic canvas.
 
     Args:
         images: Mapping filename -> image array (H, W, C or H, W).
-        transforms: Mapping filename -> 3x3 homography matrix that
-                    maps image coordinates into the common space.
+        transforms: Mapping filename -> 3x3 homography matrix that maps image -> common space.
         canvas_spec: CanvasSpec with width, height and offset_matrix.
+        blend_mode: "overwrite" (fast) or "multiband" (seamless).
+        exposure_mode: "GAIN" or "GAIN_BLOCKS" (used only when blend_mode="multiband").
+        num_bands: pyramid bands for multi-band blending.
 
     Returns:
-        The final mosaic as a NumPy array (uint8).
+        The final mosaic as a NumPy array (uint8, H x W x 3).
     """
-
-    # Unpack canvas spec
     height = canvas_spec.height
     width = canvas_spec.width
     T = canvas_spec.offset_matrix
 
-    # Initialize empty canvas (assume 3 channels; convert if needed)
-    canvas = np.full((height, width, 3), 255, dtype=np.uint8)  # white background
+    # Apply global offset to transforms: H' = T * H
+    transforms_global = {fname: (T @ H) for fname, H in transforms.items()}
 
+    blend_mode = blend_mode.lower()
 
-    # Warp and composite each image
-    for filename, img in images.items():
-        
-        # Get homography for this image
-        H = transforms.get(filename)
+    if blend_mode == "overwrite":
+        canvas = np.full((height, width, 3), 255, dtype=np.uint8)  # white background
 
-        # Skip if no transform
-        if H is None:
-            continue
+        for filename, img in images.items():
+            H = transforms_global.get(filename)
+            if H is None:
+                continue
 
-        # Ensure 3-channel image
-        if img.ndim == 2:
-            img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        else:
-            img_color = img
+            if img.ndim == 2:
+                img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+            else:
+                img_color = img
 
-        # Apply global offset: H' = T * H
-        H_global = T @ H
+            warped = cv2.warpPerspective(
+                img_color,
+                H,
+                dsize=(width, height),
+                flags=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT,
+                borderValue=(255, 255, 255),
+            )
 
-        # Warp image into canvas space
-        warped = cv2.warpPerspective(
-            img_color,
-            H_global,
-            dsize=(width, height),
-            flags=cv2.INTER_LINEAR,
+            # Copy where warped is not background-white
+            mask = np.any(warped < 255, axis=2)
+            canvas[mask] = warped[mask]
+
+        return canvas
+
+    if blend_mode == "multiband":
+        from .blending import prepare_warped_inputs, apply_exposure_compensation, multiband_blend
+
+        warped = prepare_warped_inputs(
+            images=images,
+            transforms_global=transforms_global,
+            canvas_size=(width, height),
         )
 
-        # Simple overwrite compositing:
-        # wherever warped has non-zero pixels, copy to canvas.
-        mask = np.any(warped > 0, axis=2)
-        canvas[mask] = warped[mask]
+        apply_exposure_compensation(warped, mode=exposure_mode)
+        result = multiband_blend(warped, num_bands=num_bands)
+        return result
 
-    return canvas
+    raise ValueError(f"Unsupported blend_mode: {blend_mode}")

@@ -20,6 +20,7 @@ from .matching import match_neighbors
 from .homography import estimate_homographies, HomographyResult
 from .canvas import compute_canvas_spec, render_mosaic
 from .preprocessing import compute_mean_background, subtract_background
+# from .grid_transform import compose_grid_transforms
 
 
 FeatureMethod = Literal["ORB", "SIFT"]
@@ -211,6 +212,6 @@ def run_full_pipeline(
         raise RuntimeError("No transforms available for loaded images.")
 
     canvas_spec = compute_canvas_spec(image_shapes, transforms_for_loaded)
-    mosaic = render_mosaic(images, transforms, canvas_spec, blend_mode="multiband")
+    mosaic = render_mosaic(images, transforms, canvas_spec)#, blend_mode="multiband")
 
     return mosaic

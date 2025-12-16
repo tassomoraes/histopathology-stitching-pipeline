@@ -61,13 +61,8 @@ def _transform_points(
     Returns:
         (N, 2) array of transformed points.
     """
-
-    # Reshape for cv2.perspectiveTransform
     pts = points_xy.reshape(-1, 1, 2)
-
-    # Apply transformation
     pts_transformed = cv2.perspectiveTransform(pts, H)
-
     return pts_transformed.reshape(-1, 2)
 
 
@@ -88,34 +83,24 @@ def compute_canvas_spec(
         CanvasSpec with width, height and an offset_matrix that should
         be pre-multiplied to each homography before warping.
     """
-
     all_x = []
     all_y = []
 
-    # Iterate over all images to find transformed corners
     for filename, shape in image_shapes.items():
-        
-        # Get homography for this image
         H = transforms.get(filename)
-
-        # Skip if no transform
         if H is None:
             continue
 
-        # Get image corners
         h, w = shape[0], shape[1]
         corners = _image_corners(w, h)
         transformed = _transform_points(corners, H)
 
-        # Collect all x and y coordinates
         all_x.extend(transformed[:, 0].tolist())
         all_y.extend(transformed[:, 1].tolist())
 
-    # Ensure we found some corners
     if not all_x or not all_y:
         raise ValueError("No transformed corners found. Check transforms/input.")
 
-    # Compute bounding box
     min_x = min(all_x)
     min_y = min(all_y)
     max_x = max(all_x)
@@ -128,8 +113,6 @@ def compute_canvas_spec(
     # Translation to bring (min_x, min_y) -> (0, 0)
     tx = -min_x
     ty = -min_y
-
-    # Build offset matrix
     offset_matrix = np.array(
         [
             [1.0, 0.0, tx],
@@ -150,72 +133,50 @@ def render_mosaic(
     images: Dict[str, np.ndarray],
     transforms: Dict[str, np.ndarray],
     canvas_spec: CanvasSpec,
-    blend_mode: str = "overwrite",
-    exposure_mode: str = "GAIN",
-    num_bands: int = 5,
 ) -> np.ndarray:
     """
     Warp and composite all images into a single mosaic canvas.
 
     Args:
         images: Mapping filename -> image array (H, W, C or H, W).
-        transforms: Mapping filename -> 3x3 homography matrix that maps image -> common space.
+        transforms: Mapping filename -> 3x3 homography matrix that
+                    maps image coordinates into the common space.
         canvas_spec: CanvasSpec with width, height and offset_matrix.
-        blend_mode: "overwrite" (fast) or "multiband" (seamless).
-        exposure_mode: "GAIN" or "GAIN_BLOCKS" (used only when blend_mode="multiband").
-        num_bands: pyramid bands for multi-band blending.
 
     Returns:
-        The final mosaic as a NumPy array (uint8, H x W x 3).
+        The final mosaic as a NumPy array (uint8).
     """
     height = canvas_spec.height
     width = canvas_spec.width
     T = canvas_spec.offset_matrix
 
-    # Apply global offset to transforms: H' = T * H
-    transforms_global = {fname: (T @ H) for fname, H in transforms.items()}
+    # Initialize empty canvas (assume 3 channels; convert if needed)
+    canvas = np.full((height, width, 3), 255, dtype=np.uint8)
 
-    blend_mode = blend_mode.lower()
+    for filename, img in images.items():
+        H = transforms.get(filename)
+        if H is None:
+            continue
 
-    if blend_mode == "overwrite":
-        canvas = np.full((height, width, 3), 255, dtype=np.uint8)  # white background
+        # Ensure 3-channel image
+        if img.ndim == 2:
+            img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        else:
+            img_color = img
 
-        for filename, img in images.items():
-            H = transforms_global.get(filename)
-            if H is None:
-                continue
+        # Apply global offset: H' = T * H
+        H_global = T @ H
 
-            if img.ndim == 2:
-                img_color = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-            else:
-                img_color = img
-
-            warped = cv2.warpPerspective(
-                img_color,
-                H,
-                dsize=(width, height),
-                flags=cv2.INTER_LINEAR,
-                borderMode=cv2.BORDER_CONSTANT,
-                borderValue=(255, 255, 255),
-            )
-
-            # Copy where warped is not background-white
-            mask = np.any(warped < 255, axis=2)
-            canvas[mask] = warped[mask]
-
-        return canvas
-
-    if blend_mode == "multiband":
-        from .blending import prepare_warped_inputs, apply_exposure_compensation, multiband_blend
-
-        warped = prepare_warped_inputs(
-            images=images,
-            transforms_global=transforms_global,
-            canvas_size=(width, height),
+        warped = cv2.warpPerspective(
+            img_color,
+            H_global,
+            dsize=(width, height),
+            flags=cv2.INTER_LINEAR,
         )
 
-        apply_exposure_compensation(warped, mode=exposure_mode)
-        result = multiband_blend(warped, num_bands=num_bands)
-        return result
+        # Simple overwrite compositing:
+        # wherever warped has non-zero pixels, copy to canvas.
+        mask = np.any(warped > 0, axis=2)
+        canvas[mask] = warped[mask]
 
-    raise ValueError(f"Unsupported blend_mode: {blend_mode}")
+    return canvas
